@@ -1,0 +1,67 @@
+---
+# BackendConfig: enables IAP on the scion-hub backend service.
+# After the Ingress reconciles, find the backend service numeric ID with:
+#   gcloud compute backend-services list --global --project=jq-genai-sandbox \
+#     --format="value(name,id)" | grep scion
+# Then enable IAP via Cloud Console or:
+#   gcloud compute backend-services update <name> --global \
+#     --iap=enabled,oauth2-client-id=<id>,oauth2-client-secret=<secret>
+# and set the audience in the Helm values to:
+#   /projects/490862188488/global/backendServices/<numeric-id>
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: scion-hub-backendconfig
+  namespace: scion-system
+spec:
+  iap:
+    enabled: true
+    oauthclientCredentials:
+      secretName: scion-iap-oauth-secret   # kubectl create secret generic scion-iap-oauth-secret \
+                                           #   --from-literal=client_id=<id> \
+                                           #   --from-literal=client_secret=<secret> \
+                                           #   -n scion-system
+  healthCheck:
+    requestPath: /readyz
+    type: HTTP
+  timeoutSec: 30
+  connectionDraining:
+    drainingTimeoutSec: 60
+---
+# Note: scion-scion-hub Service is already annotated with:
+#   kubectl annotate svc scion-scion-hub -n scion-system \
+#     'cloud.google.com/backend-config={"default": "scion-hub-backendconfig"}' \
+#     'cloud.google.com/neg={"ingress": true}' --overwrite
+---
+# ManagedCertificate: auto-provisions a Google-managed TLS cert.
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: scion-hub-cert
+  namespace: scion-system
+spec:
+  domains:
+    - scion.jq-projects.com
+---
+# Ingress: external HTTPS load balancer for the scion hub.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: scion-hub-ingress
+  namespace: scion-system
+  annotations:
+    kubernetes.io/ingress.global-static-ip-name: scion-hub-ip
+    networking.gke.io/managed-certificates: scion-hub-cert
+    kubernetes.io/ingress.class: "gce"
+spec:
+  rules:
+    - host: scion.jq-projects.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: scion-scion-hub
+                port:
+                  number: 80

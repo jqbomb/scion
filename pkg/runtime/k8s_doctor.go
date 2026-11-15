@@ -332,21 +332,34 @@ func (r *KubernetesRuntime) checkSecretsStoreCSIDriver(namespace string) CheckRe
 	ctx, cancel := r.diagnosticContext()
 	defer cancel()
 
-	// Check for CSIDriver resource
-	_, err := r.Client.Clientset.StorageV1().CSIDrivers().Get(ctx, "secrets-store.csi.k8s.io", metav1.GetOptions{})
-	if err != nil {
-		return CheckResult{
-			Name:        "secrets-store-csi-driver",
-			Status:      "fail",
-			Message:     "Secrets Store CSI driver (secrets-store.csi.k8s.io) not found",
-			Remediation: "Install the Secrets Store CSI Driver with the GCP provider. See: https://secrets-store-csi-driver.sigs.k8s.io/getting-started/installation",
-		}
+	// GKE's managed Secret Manager add-on registers the driver as
+	// "secrets-store-gke.csi.k8s.io"; the upstream open-source driver uses
+	// "secrets-store.csi.k8s.io". Accept either, preferring the GKE name
+	// when GKEMode is active (matches the volume driver selected at run time).
+	driverNames := []string{"secrets-store.csi.k8s.io"}
+	if r.GKEMode {
+		driverNames = []string{"secrets-store-gke.csi.k8s.io", "secrets-store.csi.k8s.io"}
 	}
 
+	var lastErr error
+	for _, name := range driverNames {
+		_, err := r.Client.Clientset.StorageV1().CSIDrivers().Get(ctx, name, metav1.GetOptions{})
+		if err == nil {
+			return CheckResult{
+				Name:    "secrets-store-csi-driver",
+				Status:  "pass",
+				Message: fmt.Sprintf("Secrets Store CSI driver (%s) is installed", name),
+			}
+		}
+		lastErr = err
+	}
+	_ = lastErr
+
 	return CheckResult{
-		Name:    "secrets-store-csi-driver",
-		Status:  "pass",
-		Message: "Secrets Store CSI driver is installed",
+		Name:        "secrets-store-csi-driver",
+		Status:      "fail",
+		Message:     "Secrets Store CSI driver (secrets-store.csi.k8s.io) not found",
+		Remediation: "Install the Secrets Store CSI Driver with the GCP provider. See: https://secrets-store-csi-driver.sigs.k8s.io/getting-started/installation",
 	}
 }
 

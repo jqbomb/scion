@@ -1,0 +1,42 @@
+hub:
+  hubId: scion-gke-hub
+  baseUrl: https://scion.jq-projects.com
+  webPort: 8080
+  adminEmails:
+    - justin@jquattlebaum.altostrat.com
+  extraEnv:
+    - name: SCION_CLOUD_LOGGING
+      value: "true"
+    - name: SCION_GCP_PROJECT_ID
+      value: jq-genai-sandbox
+
+serviceAccount:
+  gcpServiceAccount: scion-hub@jq-genai-sandbox.iam.gserviceaccount.com
+
+image:
+  repository: us-central1-docker.pkg.dev/jq-genai-sandbox/scion/scion-hub-gke
+  digest: sha256:4e900c0e787a053ac91d1ea97e7171833e954640ad3057b0e287aaa397a06ce2
+
+agents:
+  imageRegistry: us-central1-docker.pkg.dev/jq-genai-sandbox/scion
+
+auth:
+  mode: proxy
+  sessionSecret: scion-gke-session-secret-change-me-later-32chars-minimum-key!
+  proxy:
+    iap:
+      audience: /projects/490862188488/global/backendServices/1257252009918403174
+  transport:
+    mode: iap
+    oidcAudience: 490862188488-9e26lehdknmihpodaqg64ej8oeu9bgsd.apps.googleusercontent.com
+    platformAuthSa: scion-transport@jq-genai-sandbox.iam.gserviceaccount.com
+
+runtime:
+  namespace: scion-system
+  gke: true
+
+config:
+  extra:
+    runtimes:
+      kubernetes:
+        shared_dir_storage_class: scion-filestore-rwx
